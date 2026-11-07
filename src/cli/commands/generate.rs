@@ -28,10 +28,10 @@ pub(super) fn run(
             } else {
                 output.join(format!("{}.rs", module.replace('-', "_")))
             };
-            if let Some(parent) = destination.parent() {
-                if !parent.as_os_str().is_empty() {
-                    fs::create_dir_all(parent)?;
-                }
+            if let Some(parent) = destination.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                fs::create_dir_all(parent)?;
             }
             fs::write(&destination, source)?;
             println!("Generated Rust language tables: {}", destination.display());

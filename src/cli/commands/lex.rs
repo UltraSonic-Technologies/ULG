@@ -36,8 +36,6 @@ pub(super) fn run(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn escape_debug_is_available_for_lexeme_display() {
         let text = "line\nvalue";

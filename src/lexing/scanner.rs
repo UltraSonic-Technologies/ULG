@@ -288,12 +288,12 @@ impl<'a> Scanner<'a> {
     fn scan_punctuation(&mut self, tokens: &mut Vec<Token>) -> bool {
         let mut best: Option<(usize, String)> = None;
         for matcher in &self.punctuation {
-            if let Some(found) = matcher.regex.find(self.remaining()) {
-                if found.start() == 0 && found.end() > 0
-                    && best.as_ref().is_none_or(|(length, _)| found.end() > *length)
-                {
-                    best = Some((found.end(), matcher.name.clone()));
-                }
+            if let Some(found) = matcher.regex.find(self.remaining())
+                && found.start() == 0
+                && found.end() > 0
+                && best.as_ref().is_none_or(|(length, _)| found.end() > *length)
+            {
+                best = Some((found.end(), matcher.name.clone()));
             }
         }
         let Some((length, rule)) = best else {
@@ -384,6 +384,7 @@ fn compile_punctuation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexing::tokenize;
     use crate::model::{LanguageVersion, PunctuationDefinition};
 
     fn definition() -> LanguageDefinition {
