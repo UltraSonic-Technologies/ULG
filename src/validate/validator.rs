@@ -93,14 +93,16 @@ mod tests {
 
     #[test]
     fn rejects_invalid_regex() {
-        let mut definition = LanguageDefinition::default();
-        definition.name = "Sample".into();
-        definition.description = "A sample language".into();
-        definition.keywords.push("fn".into());
-        definition.operators.push("=".into());
-        definition.punctuation.push(
-            crate::model::PunctuationDefinition::new("CUSTOM", "(")
-        );
+        let definition = LanguageDefinition {
+            name: "Sample".into(),
+            description: "A sample language".into(),
+            keywords: vec!["fn".into()],
+            operators: vec!["=".into()],
+            punctuation: vec![
+                crate::model::PunctuationDefinition::new("CUSTOM", "(")
+            ],
+            ..LanguageDefinition::default()
+        };
         assert!(validate(&definition).is_err());
     }
 }

@@ -106,8 +106,10 @@ mod tests {
 
     #[test]
     fn orders_long_operators_first() {
-        let mut definition = LanguageDefinition::default();
-        definition.operators = vec!["=".into(), "==".into(), "->".into()];
+        let definition = LanguageDefinition {
+            operators: vec!["=".into(), "==".into(), "->".into()],
+            ..LanguageDefinition::default()
+        };
         assert_eq!(
             definition.operators_longest_first(),
             vec!["->", "==", "="]
