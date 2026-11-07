@@ -1,0 +1,21 @@
+{
+    [!INIT]
+    (LANG_NAME "DataScript")
+    (LANG_DESC "A small data-oriented language used to test strings and delimiters")
+    (LANG_VER 0.4.2)
+    ({
+        [KEYWORDS]:(!INIT)
+        (LIST["record", "field", "true", "false", "null"])
+        (!END)
+        [COMMENTS]:(!INIT)
+        (LIST["#"])
+        (!END)
+        [OPERATORS]:(!INIT)
+        (LIST["=", ":", "|", "->"])
+        (!END)
+        [PUNCTUATION]:(!INIT)
+        (MATCH{BRACES -> "\{\}", BRACKETS -> "\[\]", COMMA -> ","})
+        (!END)
+    })
+    [!END]
+}

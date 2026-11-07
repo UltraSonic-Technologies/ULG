@@ -1,0 +1,9 @@
+fn main() {
+    var greeting = "Hello from UltimateX";
+    var build = 1.0;
+    @c This is a line comment
+    @mc This block comment closes here @mc
+    if build >= 1.0 then {
+        return greeting;
+    }
+}

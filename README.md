@@ -28,13 +28,13 @@ type systems, compiler backends, and language runtimes are separate milestones.
 
 ## Workspace layout
 
-- `crates/ulg-syntax`: parsing the ULG definition format.
-- `crates/ulg-model`: typed language-definition data structures.
-- `crates/ulg-diagnostics`: diagnostics and source spans.
-- `crates/ulg-validate`: semantic validation of definitions.
-- `crates/ulg-lexer`: runtime lexer and token stream.
-- `crates/ulg-codegen`: generated Rust artifacts.
-- `crates/ulg-cli`: the `ulg` command-line application.
+- `src/model/`: typed language-definition data structures.
+- `src/parser/`: concrete reader for ULG documents and source locations.
+- `src/diagnostics/`: diagnostics, stable codes, and source spans.
+- `src/validate/`: semantic validation of declarations.
+- `src/lexing/`: runtime lexer and token stream.
+- `src/codegen/`: deterministic Rust artifact generator.
+- `src/cli/`: check, inspect, lex, and generate commands.
 - `examples/`: complete language definitions and source examples.
 - `docs/`: specification, guides, design notes, and API explanations.
 - `tests/`: integration and regression tests.
@@ -81,7 +81,7 @@ A language definition has a document header, metadata, and named sections:
 ```
 
 The exact grammar and supported fields are documented in
-[`docs/specification.md`](docs/specification.md).
+[`docs/spec/specification.md`](docs/specification.md).
 
 ## Command-line usage
 

@@ -1,0 +1,46 @@
+{
+    [!INIT]
+    (LANG_NAME "UltimateX")
+    (LANG_DESC "The language for games and GUIs using Ultra2D-X")
+    (LANG_VER 1.0.0)
+    ({
+        [KEYWORDS]:(!INIT)
+        (LIST[
+            "var", "const", "fn", "namespace", "if", "else", "elsif", "then",
+            "while", "do", "class", "enum", "struct", "end", "@import",
+            "@define", "@ifnotdefined", "@ifdefined", "@definedefault", "pub",
+            "priv", "long", "short", "large", "tiny", "@macro", "match", "auto",
+            "for", "in", "@definetype", "return", "@definemodule",
+            "@definepackage", "as", "async", "await", "restricted", "@require",
+            "int", "double", "string", "char", "float", "bool", "string_path",
+            "or", "True", "False", "Null", "global"
+        ])
+        (!END)
+
+        [COMMENTS]:(!INIT)
+        (LIST[
+            "@c", "@mc @mc"
+        ])
+        (!END)
+
+        [OPERATORS]:(!INIT)
+        (LIST[
+            "+", "-", "*", "/", "%", "&", "<", ">", "=", "==", "+=", "-=",
+            "*=", "/=", "%=", "<=", ">=", "->"
+        ])
+        (!END)
+
+        [PUNCTUATION]:(!INIT)
+        (MATCH{
+            PARENS -> "\(\)",
+            BRACKETS -> "\[\]",
+            BRACES -> "\{\}",
+            SEMICOLON -> ";",
+            COMMA -> ",",
+            COLON -> ":",
+            DOT -> "\."
+        })
+        (!END)
+    })
+    [!END]
+}

@@ -1,0 +1,21 @@
+{
+    [!INIT]
+    (LANG_NAME "Minimal")
+    (LANG_DESC "A minimal language definition used by ULG tests")
+    (LANG_VER 1.0)
+    ({
+        [KEYWORDS]:(!INIT)
+        (LIST["fn", "return", "let"])
+        (!END)
+        [COMMENTS]:(!INIT)
+        (LIST["//"])
+        (!END)
+        [OPERATORS]:(!INIT)
+        (LIST["+", "-", "=", "=="])
+        (!END)
+        [PUNCTUATION]:(!INIT)
+        (MATCH{PARENS -> "\(\)", BRACES -> "\{\}", SEMICOLON -> ";"})
+        (!END)
+    })
+    [!END]
+}
