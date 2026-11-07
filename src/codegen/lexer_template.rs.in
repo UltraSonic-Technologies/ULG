@@ -1,0 +1,383 @@
+//! Generated Rust lexer for a ULG language definition.
+//!
+//! This file is emitted by the ULG Rust backend. Regenerate it from the source
+//! .ulg file instead of editing the lexical tables by hand. The runtime uses
+//! the regex crate for custom punctuation expressions and the standard
+//! library for source traversal, token storage, and diagnostics.
+
+use regex::Regex;
+use std::fmt;
+use std::sync::OnceLock;
+
+pub const MODULE_NAME: &str = @@MODULE_NAME@@;
+pub const LANGUAGE_NAME: &str = @@LANGUAGE_NAME@@;
+pub const LANGUAGE_DESCRIPTION: &str = @@LANGUAGE_DESCRIPTION@@;
+pub const LANGUAGE_VERSION: &str = @@LANGUAGE_VERSION@@;
+pub const KEYWORDS: &[&str] = &@@KEYWORDS@@;
+pub const COMMENTS: &[(&str, Option<&str>)] = &@@COMMENTS@@;
+pub const OPERATORS: &[&str] = &@@OPERATORS@@;
+pub const PUNCTUATION: &[(&str, &str)] = &@@PUNCTUATION@@;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TokenKind {
+    Keyword, Identifier, Number, String, Character, Comment, Operator, Punctuation,
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self {
+            Self::Keyword => "KEYWORD",
+            Self::Identifier => "IDENTIFIER",
+            Self::Number => "NUMBER",
+            Self::String => "STRING",
+            Self::Character => "CHARACTER",
+            Self::Comment => "COMMENT",
+            Self::Operator => "OPERATOR",
+            Self::Punctuation => "PUNCTUATION",
+        };
+        f.write_str(label)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl Span {
+    pub const fn new(start: usize, end: usize, line: usize, column: usize) -> Self {
+        Self { start, end, line, column }
+    }
+    pub const fn len(self) -> usize { self.end - self.start }
+    pub const fn is_empty(self) -> bool { self.start == self.end }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub lexeme: String,
+    pub span: Span,
+    pub rule: Option<String>,
+}
+
+impl Token {
+    fn new(kind: TokenKind, lexeme: String, span: Span, rule: Option<String>) -> Self {
+        Self { kind, lexeme, span, rule }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LexError {
+    pub message: String,
+    pub span: Span,
+}
+
+impl LexError {
+    fn new(message: impl Into<String>, span: Span) -> Self {
+        Self { message: message.into(), span }
+    }
+}
+
+impl fmt::Display for LexError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} at line {}, column {}", self.message, self.span.line, self.span.column)
+    }
+}
+impl std::error::Error for LexError {}
+
+type MatcherList = Vec<(String, Regex)>;
+static PUNCTUATION_MATCHERS: OnceLock<Result<MatcherList, String>> = OnceLock::new();
+
+fn build_punctuation_matchers() -> Result<MatcherList, String> {
+    let mut matchers = Vec::new();
+    for (name, pattern) in PUNCTUATION {
+        let pair = match *name {
+            "PARENS" => Some(("(", ")")),
+            "BRACKETS" => Some(("[", "]")),
+            "BRACES" => Some(("{", "}")),
+            _ => None,
+        };
+        if let Some((opening, closing)) = pair {
+            for (suffix, literal) in [("OPEN", opening), ("CLOSE", closing)] {
+                let expression = format!(r"\A{}", Regex::escape(literal));
+                let regex = Regex::new(&expression).map_err(|error| error.to_string())?;
+                matchers.push((format!("{name}_{suffix}"), regex));
+            }
+            continue;
+        }
+        let expression = format!(r"\A(?:{pattern})");
+        let regex = Regex::new(&expression)
+            .map_err(|error| format!("invalid punctuation rule {name}: {error}"))?;
+        if regex.find("").is_some_and(|found| found.end() == 0) {
+            return Err(format!("punctuation rule {name} matches empty text"));
+        }
+        matchers.push(((*name).to_owned(), regex));
+    }
+    Ok(matchers)
+}
+
+fn punctuation_matchers() -> Result<&'static [(String, Regex)], LexError> {
+    match PUNCTUATION_MATCHERS.get_or_init(build_punctuation_matchers) {
+        Ok(matchers) => Ok(matchers.as_slice()),
+        Err(message) => Err(LexError::new(message.clone(), Span::new(0, 0, 1, 1))),
+    }
+}
+
+pub fn is_keyword(value: &str) -> bool { KEYWORDS.contains(&value) }
+
+pub fn longest_operator(value: &str) -> Option<&'static str> {
+    OPERATORS.iter().copied()
+        .filter(|operator| value.starts_with(operator))
+        .max_by_key(|operator| operator.len())
+}
+
+pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
+    Scanner::new(source, punctuation_matchers()?).scan()
+}
+
+#[derive(Clone, Copy)]
+struct Mark { offset: usize, line: usize, column: usize }
+
+struct Scanner<'source> {
+    source: &'source str,
+    offset: usize,
+    line: usize,
+    column: usize,
+    punctuation: &'static [(String, Regex)],
+}
+
+impl<'source> Scanner<'source> {
+    fn new(source: &'source str, punctuation: &'static [(String, Regex)]) -> Self {
+        Self { source, offset: 0, line: 1, column: 1, punctuation }
+    }
+    fn remaining(&self) -> &'source str { &self.source[self.offset..] }
+    fn peek(&self) -> Option<char> { self.remaining().chars().next() }
+    fn peek_second(&self) -> Option<char> { self.remaining().chars().nth(1) }
+    fn mark(&self) -> Mark { Mark { offset: self.offset, line: self.line, column: self.column } }
+    fn span(&self, mark: Mark) -> Span { Span::new(mark.offset, self.offset, mark.line, mark.column) }
+    fn error(&self, mark: Mark, message: impl Into<String>) -> LexError {
+        LexError::new(message, self.span(mark))
+    }
+    fn advance(&mut self) -> Option<char> {
+        let ch = self.peek()?;
+        self.offset += ch.len_utf8();
+        if ch == '\n' { self.line += 1; self.column = 1; }
+        else { self.column += 1; }
+        Some(ch)
+    }
+    fn advance_bytes(&mut self, count: usize) {
+        let target = self.offset + count;
+        while self.offset < target { self.advance(); }
+    }
+    fn emit(&self, tokens: &mut Vec<Token>, kind: TokenKind, mark: Mark, rule: Option<String>) {
+        let lexeme = self.source[mark.offset..self.offset].to_owned();
+        tokens.push(Token::new(kind, lexeme, self.span(mark), rule));
+    }
+    fn identifier_start(ch: char) -> bool { ch == '_' || ch == '@' || ch.is_alphabetic() }
+    fn identifier_continue(ch: char) -> bool { ch == '_' || ch.is_alphanumeric() }
+
+    fn marker_boundary(&self, marker: &str) -> bool {
+        let Some(last) = marker.chars().last() else { return false; };
+        if !Self::identifier_continue(last) { return true; }
+        self.remaining()[marker.len()..].chars().next()
+            .is_none_or(|next| !Self::identifier_continue(next))
+    }
+
+    fn comment_at_cursor(&self) -> Option<(&'static str, Option<&'static str>)> {
+        COMMENTS.iter().copied()
+            .filter(|(open, _)| self.remaining().starts_with(open) && self.marker_boundary(open))
+            .max_by_key(|(open, _)| open.len())
+    }
+
+    fn scan_comment(&mut self, tokens: &mut Vec<Token>) -> Result<bool, LexError> {
+        let Some((opener, closer)) = self.comment_at_cursor() else { return Ok(false); };
+        let mark = self.mark();
+        self.advance_bytes(opener.len());
+        if let Some(closer) = closer {
+            let Some(end) = self.remaining().find(closer) else {
+                return Err(self.error(mark, format!("unterminated block comment; expected {closer:?}")));
+            };
+            self.advance_bytes(end + closer.len());
+        } else {
+            while let Some(ch) = self.peek() {
+                if ch == '\n' { break; }
+                self.advance();
+            }
+        }
+        self.emit(tokens, TokenKind::Comment, mark, None);
+        Ok(true)
+    }
+
+    fn scan_quoted(&mut self, tokens: &mut Vec<Token>) -> Result<(), LexError> {
+        let mark = self.mark();
+        let quote = self.peek().expect("caller checked quote");
+        self.advance();
+        loop {
+            let Some(ch) = self.peek() else {
+                return Err(self.error(mark, "unterminated quoted literal"));
+            };
+            if ch == quote { self.advance(); break; }
+            if ch == '\n' || ch == '\r' {
+                return Err(self.error(mark, "newline in quoted literal"));
+            }
+            if ch == '\\' {
+                self.advance();
+                if self.peek().is_none() {
+                    return Err(self.error(mark, "incomplete escape sequence"));
+                }
+            }
+            self.advance();
+        }
+        let kind = if quote == '"' { TokenKind::String } else { TokenKind::Character };
+        self.emit(tokens, kind, mark, None);
+        Ok(())
+    }
+
+    fn scan_number(&mut self, tokens: &mut Vec<Token>) -> Result<(), LexError> {
+        let mark = self.mark();
+        let prefix = self.remaining().get(..2).unwrap_or("");
+        let radix = match prefix {
+            "0x" | "0X" => Some(16),
+            "0b" | "0B" => Some(2),
+            "0o" | "0O" => Some(8),
+            _ => None,
+        };
+        if let Some(radix) = radix {
+            self.advance_bytes(2);
+            let start = self.offset;
+            while self.peek().is_some_and(|ch| {
+                ch == '_' || ch.to_digit(radix).is_some()
+            }) { self.advance(); }
+            if self.offset == start {
+                return Err(self.error(mark, "base-prefixed number has no digits"));
+            }
+        } else {
+            while self.peek().is_some_and(|ch| ch.is_ascii_digit() || ch == '_') {
+                self.advance();
+            }
+            if self.peek() == Some('.') && self.peek_second().is_some_and(|ch| ch.is_ascii_digit()) {
+                self.advance();
+                while self.peek().is_some_and(|ch| ch.is_ascii_digit() || ch == '_') {
+                    self.advance();
+                }
+            }
+            if matches!(self.peek(), Some('e' | 'E')) {
+                self.advance();
+                if matches!(self.peek(), Some('+' | '-')) { self.advance(); }
+                let start = self.offset;
+                while self.peek().is_some_and(|ch| ch.is_ascii_digit() || ch == '_') {
+                    self.advance();
+                }
+                if self.offset == start {
+                    return Err(self.error(mark, "numeric exponent has no digits"));
+                }
+            }
+        }
+        self.emit(tokens, TokenKind::Number, mark, None);
+        Ok(())
+    }
+
+    fn keyword_at_cursor(&self) -> Option<&'static str> {
+        KEYWORDS.iter().copied()
+            .filter(|word| self.remaining().starts_with(word))
+            .filter(|word| self.remaining()[word.len()..].chars().next()
+                .is_none_or(|next| !Self::identifier_continue(next)))
+            .max_by_key(|word| word.len())
+    }
+
+    fn scan_keyword(&mut self, tokens: &mut Vec<Token>) -> bool {
+        let Some(word) = self.keyword_at_cursor() else { return false; };
+        let mark = self.mark();
+        self.advance_bytes(word.len());
+        self.emit(tokens, TokenKind::Keyword, mark, None);
+        true
+    }
+
+    fn scan_identifier(&mut self, tokens: &mut Vec<Token>) {
+        let mark = self.mark();
+        self.advance();
+        while self.peek().is_some_and(Self::identifier_continue) { self.advance(); }
+        self.emit(tokens, TokenKind::Identifier, mark, None);
+    }
+
+    fn scan_operator(&mut self, tokens: &mut Vec<Token>) -> bool {
+        let Some(operator) = longest_operator(self.remaining()) else { return false; };
+        let mark = self.mark();
+        self.advance_bytes(operator.len());
+        self.emit(tokens, TokenKind::Operator, mark, None);
+        true
+    }
+
+    fn scan_punctuation(&mut self, tokens: &mut Vec<Token>) -> bool {
+        let mut best: Option<(usize, String)> = None;
+        for (name, regex) in self.punctuation {
+            let Some(found) = regex.find(self.remaining()) else { continue; };
+            if found.start() != 0 || found.end() == 0 { continue; }
+            if best.as_ref().is_none_or(|(length, _)| found.end() > *length) {
+                best = Some((found.end(), name.clone()));
+            }
+        }
+        let Some((length, rule)) = best else { return false; };
+        let mark = self.mark();
+        self.advance_bytes(length);
+        self.emit(tokens, TokenKind::Punctuation, mark, Some(rule));
+        true
+    }
+
+    fn scan(mut self) -> Result<Vec<Token>, LexError> {
+        let mut tokens = Vec::new();
+        while let Some(ch) = self.peek() {
+            if ch.is_whitespace() { self.advance(); continue; }
+            if self.scan_comment(&mut tokens)? { continue; }
+            if ch == '"' || ch == '\'' { self.scan_quoted(&mut tokens)?; continue; }
+            if ch.is_ascii_digit() { self.scan_number(&mut tokens)?; continue; }
+            if self.scan_keyword(&mut tokens) { continue; }
+            if Self::identifier_start(ch) { self.scan_identifier(&mut tokens); continue; }
+            if self.scan_operator(&mut tokens) { continue; }
+            if self.scan_punctuation(&mut tokens) { continue; }
+            let mark = self.mark();
+            return Err(self.error(mark, format!("unexpected character {ch:?}")));
+        }
+        Ok(tokens)
+    }
+}
+
+pub fn format_tokens(tokens: &[Token]) -> String {
+    let mut output = String::from("KIND           LEXEME                   LINE   COLUMN\n");
+    for token in tokens {
+        output.push_str(&format!(
+            "{:<14} {:<24} {:>6} {:>8}\n",
+            token.kind, token.lexeme.escape_debug(), token.span.line, token.span.column
+        ));
+    }
+    output.push_str(&format!("{} token(s)\n", tokens.len()));
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exposes_generated_language_identity() {
+        assert!(!LANGUAGE_NAME.is_empty());
+        assert!(!LANGUAGE_VERSION.is_empty());
+        assert_eq!(MODULE_NAME, @@MODULE_NAME@@);
+    }
+
+    #[test]
+    fn keyword_lookup_is_case_sensitive() {
+        assert!(!is_keyword("__ulg_unknown_keyword__"));
+    }
+
+    #[test]
+    fn operator_lookup_uses_maximal_munch() {
+        if let Some(operator) = OPERATORS.iter().find(|op| op.len() > 1) {
+            let source = format!("{operator}suffix");
+            assert_eq!(longest_operator(&source), Some(*operator));
+        }
+    }
+}

@@ -1,13 +1,16 @@
 //! Language artifact generators.
 //!
 //! Backends consume validated language definitions and emit deterministic
-//! output. The first backend generates a Rust module containing metadata and
-//! lexical tables. Generated modules are data-oriented and intentionally do
-//! not depend on the ULG crate at runtime.
+//! output. The Rust backend generates a complete reusable lexer, including
+//! metadata, token and span types, literal scanning, comments, operators,
+//! and custom punctuation matchers. Generated modules depend only on the
+//! standard library and regex crate, not on the ULG implementation.
 
 mod escaping;
+mod lexer;
 mod rust;
 
+pub use lexer::generate_rust_lexer;
 pub use rust::{generate_rust, RustGenerationOptions};
 
 /// Supported code-generation targets.
@@ -22,5 +25,15 @@ impl Backend {
         match self {
             Self::Rust => "rust",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rust_is_the_first_supported_backend() {
+        assert_eq!(Backend::Rust.as_str(), "rust");
     }
 }
