@@ -26,7 +26,9 @@ fn recognizes_compound_assignment_operators() {
         .filter(|token| token.kind == TokenKind::Operator)
         .map(|token| token.lexeme.as_str())
         .collect();
-    assert_eq!(values, ["+=", "=", "-=", "=", "*=", "=", "/=", "=", "%=", "="]);
+
+    // Maximal munch must produce each compound assignment as one token.
+    assert_eq!(values, ["+=", "-=", "*=", "/=", "%="]);
 }
 
 #[test]
